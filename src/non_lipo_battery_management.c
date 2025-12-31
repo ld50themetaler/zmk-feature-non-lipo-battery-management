@@ -22,6 +22,15 @@
 
 LOG_MODULE_REGISTER(zmk_battery_non_lipo, CONFIG_ZMK_LOG_LEVEL);
 
+// On boards without USB device stack, avoid referencing USB APIs.
+static inline bool non_lipo_usb_powered(void) {
+#if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
+    return zmk_usb_is_powered();
+#else
+    return false;
+#endif
+}
+
 #if IS_ENABLED(CONFIG_ZMK_NON_LIPO_ADV_SLEEP_TIMEOUT)
 static bool is_advertising = true;  // Assume advertising when there's no connection
 static bool has_connection = false;
@@ -31,7 +40,7 @@ static struct k_work_delayable adv_timeout_work;
 // Callback to check advertising time and enter sleep mode if needed
 static void adv_timeout_handler(struct k_work *work) {
     // Only check if we're advertising, have no connections, and no USB power
-    if (is_advertising && !has_connection && !zmk_usb_is_powered()) {
+    if (is_advertising && !has_connection && !non_lipo_usb_powered()) {
         int64_t now = k_uptime_get();
         int64_t elapsed = now - advertising_start_time;
         
@@ -120,7 +129,7 @@ static void check_voltage_and_shutdown(uint16_t millivolts) {
     // Check if voltage is below the low threshold
     if (millivolts <= CONFIG_ZMK_NON_LIPO_LOW_MV) {
         // Only shut down if USB power is not connected
-        if (!zmk_usb_is_powered()) {
+        if (!non_lipo_usb_powered()) {
             LOG_WRN("Battery voltage (%dmv) below critical threshold (%dmv) and USB not connected, shutting down",
                     millivolts, CONFIG_ZMK_NON_LIPO_LOW_MV);
 
